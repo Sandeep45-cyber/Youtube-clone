@@ -1,0 +1,90 @@
+:root {
+  --background: #f5f6f8;
+  --surface: #ffffff;
+  --text: #111111;
+  --muted: #666666;
+  --accent: #d21f3c;
+  --border: #e7e7e7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  background: radial-gradient(circle at top left, #fff3f4, var(--background) 40%);
+  color: var(--text);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin-bottom: 0.25rem;
+}
+
+p {
+  color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+input,
+textarea,
+button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+button {
+  background: var(--accent);
+  border: 0;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.video-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+video {
+  width: 100%;
+  border-radius: 10px;
+  background: #000;
+}
+
+.status {
+  display: inline-block;
+  font-size: 0.85rem;
+  background: #f2f2f2;
+  color: #333;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
