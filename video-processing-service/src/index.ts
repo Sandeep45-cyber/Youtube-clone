@@ -18,6 +18,7 @@ const firestore = new Firestore();
 const videosCollection = process.env.FIRESTORE_VIDEOS_COLLECTION || 'videos';
 const outputBucket = process.env.OUTPUT_BUCKET;
 const jobToken = process.env.PUBSUB_VERIFICATION_TOKEN;
+const renditionHeights = [360, 720];
 
 type JobPayload = {
   videoId: string;
@@ -30,6 +31,12 @@ type PubSubBody = {
   message?: {
     data?: string;
   };
+};
+
+type RenditionInfo = {
+  path: string;
+  playbackUrl: string;
+  height: number;
 };
 
 function parsePubSubPayload(body: PubSubBody): JobPayload {
@@ -59,13 +66,13 @@ async function updateVideoStatus(videoId: string, values: Record<string, unknown
   );
 }
 
-function transcodeTo360p(inputPath: string, outputPath: string): Promise<void> {
+function transcodeToHeight(inputPath: string, outputPath: string, height: number): Promise<void> {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .videoCodec('libx264')
       .audioCodec('aac')
       .outputOptions(['-movflags +faststart'])
-      .size('?x360')
+      .size(`?x${height}`)
       .on('end', () => resolve())
       .on('error', (err: Error) => reject(err))
       .save(outputPath);
@@ -95,8 +102,6 @@ app.post('/process-video', async (req, res) => {
 
     const inputFileName = path.basename(payload.inputObject);
     const localInputPath = path.join(os.tmpdir(), `raw-${Date.now()}-${inputFileName}`);
-    const localOutputPath = path.join(os.tmpdir(), `processed-${Date.now()}-${payload.videoId}.mp4`);
-    const outputObject = `processed/${payload.videoId}.mp4`;
 
     await updateVideoStatus(payload.videoId, {
       status: 'processing',
@@ -107,24 +112,44 @@ app.post('/process-video', async (req, res) => {
       destination: localInputPath,
     });
 
-    await transcodeTo360p(localInputPath, localOutputPath);
+    const renditions: Record<string, RenditionInfo> = {};
+    const localOutputs: string[] = [];
 
-    await storage.bucket(targetBucket).upload(localOutputPath, {
-      destination: outputObject,
-      contentType: 'video/mp4',
-      metadata: {
-        cacheControl: 'public, max-age=3600',
-      },
-    });
+    for (const height of renditionHeights) {
+      const localOutputPath = path.join(
+        os.tmpdir(),
+        `processed-${payload.videoId}-${height}p-${Date.now()}.mp4`,
+      );
+      const outputObject = `processed/${payload.videoId}/${height}p.mp4`;
+
+      await transcodeToHeight(localInputPath, localOutputPath, height);
+
+      await storage.bucket(targetBucket).upload(localOutputPath, {
+        destination: outputObject,
+        contentType: 'video/mp4',
+        metadata: {
+          cacheControl: 'public, max-age=3600',
+        },
+      });
+
+      const key = `${height}p`;
+      renditions[key] = {
+        path: `gs://${targetBucket}/${outputObject}`,
+        playbackUrl: `https://storage.googleapis.com/${targetBucket}/${outputObject}`,
+        height,
+      };
+      localOutputs.push(localOutputPath);
+    }
 
     await updateVideoStatus(payload.videoId, {
       status: 'ready',
-      processedPath: `gs://${targetBucket}/${outputObject}`,
-      playbackUrl: `https://storage.googleapis.com/${targetBucket}/${outputObject}`,
+      renditions,
+      processedPath: renditions['720p']?.path || renditions['360p']?.path,
+      playbackUrl: renditions['720p']?.playbackUrl || renditions['360p']?.playbackUrl,
     });
 
     fs.rmSync(localInputPath, { force: true });
-    fs.rmSync(localOutputPath, { force: true });
+    localOutputs.forEach((output) => fs.rmSync(output, { force: true }));
 
     return res.status(200).send('processed');
   } catch (error) {
